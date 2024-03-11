@@ -23,8 +23,8 @@ license = {text = "Parity-7.0.0"}
 
 [tool.pdm.scripts]
 gen = {call = "legal_vec.gen:train"}
-
 download = {call = "legal_vec.data.download:main"}
+style = "black --preview src"
 
 [tool.black]
 line-length = 100

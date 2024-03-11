@@ -22,12 +22,10 @@ allowed_opinions = {
 }
 
 
-def build_db(case_file: zipfile.Path, client, model, progress):
+def build_db(case_file: zipfile.Path, client: QdrantClient, model: SentenceTransformer):
     case: CaseMetadata = parse_json(case_file)
 
-
     if client.retrieve(COLLECTION_NAME, [case["id"]]):
-        progress()
         return
 
     body = case["casebody"]
@@ -44,7 +42,6 @@ def build_db(case_file: zipfile.Path, client, model, progress):
     opinions = body["opinions"]
 
     if not opinions:
-        progress()
         return
 
     try:
@@ -52,22 +49,15 @@ def build_db(case_file: zipfile.Path, client, model, progress):
             filter(lambda o: o["type"] in allowed_opinions, body["opinions"]),
             key=lambda o: allowed_opinions[o["type"]],
         )[0]
-    except StopIteration:
+    except (StopIteration, IndexError):
         types = list(map(lambda o: o["type"], opinions))
-        rich.print(f"[red] {cite} Opinions: {types}")
-        progress()
-        return
-    except IndexError:
-        types = list(map(lambda o: o["type"], opinions))
-        rich.print(f"[red] {cite} Opinions: {types}")
-        progress()
+        rich.print(f"[red] {cite} error selecting opinion from options: {types}")
         return
     # print(opinion["text"])
     text = opinion["text"]
     paragraphs = text.splitlines()
 
     if len(paragraphs) < 5 or len(text) < 150:
-        progress()
         return
 
     vector = model.encode(text)
@@ -93,7 +83,6 @@ def build_db(case_file: zipfile.Path, client, model, progress):
             )
         ],
     )
-    progress()
 
 
 @click.command()
@@ -126,9 +115,10 @@ def train():
             try:
                 for case_file in zipfile.Path(zip, "json/").iterdir():
                     # bar.text = f"{zip_path.parent.name}/{zip_path.stem}/{case_file.name}"
-                    build_db(case_file, client, model, bar)
+                    build_db(case_file, client, model)
+                    bar()
             except zipfile.BadZipfile:
-                rich.print("[red]Bad Zip:", case_file, file=sys.stderr)
+                rich.print(f"[red]Bad Zip: {case_file}", file=sys.stderr)
                 bar()
                 continue
 
