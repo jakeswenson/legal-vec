@@ -1,0 +1,34 @@
+[project]
+name = "legal-vec"
+version = "0.0.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "Jake Swenson", email = "jake@jakeswenson.com"},
+]
+dependencies = [
+    "sentence-transformers>=2.5.1",
+    "click>=8.1.7",
+    "qdrant-client[fastembed]>=1.8.0",
+    "fastembed>=0.2.2",
+    "uuid7>=0.1.0",
+    "httpx[http2]>=0.27.0",
+    "alive-progress>=3.1.5",
+    "json-stream>=2.3.2",
+    "rich>=13.7.1",
+    "black>=24.2.0",
+]
+requires-python = "==3.12.*"
+readme = "README.md"
+license = {text = "Parity-7.0.0"}
+
+[tool.pdm.scripts]
+gen = {call = "legal_vec.gen:train"}
+
+download = {call = "legal_vec.data.download:main"}
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.pdm]
+distribution = true
