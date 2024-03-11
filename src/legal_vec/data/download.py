@@ -1,26 +1,16 @@
 import click
+import rich
+
 import legal_vec
 import httpx
 from alive_progress import alive_bar
 from typing import Iterator
+from pathlib import Path
 from legal_vec.types import JurisdictionFull, Reporter, ReporterVolume
 
 client = httpx.Client(http2=True, base_url="https://static.case.law")
-jurisdiction_files = legal_vec.data_dir.glob("Jurisdiction.*.json")
 volumes_file = legal_vec.data_dir / "VolumesMetadata.json"
-
-jurisdictions: list[JurisdictionFull] = [legal_vec.parse_json(f) for f in jurisdiction_files]
-
-reporters: Iterator[Reporter] = (r for j in jurisdictions for r in j["reporters"])
-
-jurisdiction_ids = set(j["id"] for j in jurisdictions)
-
-volumes: Iterator[ReporterVolume] = (
-    v
-    for v in legal_vec.parse_json_stream(volumes_file)
-    for jur in v["jurisdictions"]
-    if jur["id"] in jurisdiction_ids
-)
+jurisdictions_file = legal_vec.data_dir / "JurisdictionsMetadata.json"
 
 
 def download_volume(reporter_slug: str, vol: str, bar) -> bool:
@@ -36,32 +26,83 @@ def download_volume(reporter_slug: str, vol: str, bar) -> bool:
     headers = {"Range": f"bytes={downloaded}-"}
     url: str = f"/{reporter_slug}/{vol}.zip"
     with client.stream("GET", url=url, headers=headers) as r:
+        r.raise_for_status()
+
+        count = downloaded
         total = int(r.headers["Content-Length"])
-        bar.text(f"{reporter_slug}/{vol}.zip")
-        # dl_progress = progress.add_task(f"[green]...", total=total)
-        # with alive_bar(total) as dl_bar:
         with open(dl_path, mode="ab") as output:
             for data in r.iter_bytes():
+                bar.text(f"{reporter_slug}/{vol}.zip {count}/{total} ")
                 output.write(data)
-    # progress.advance(dl_progress, len(data))
-    # dl_bar(len(data))
-    # progress.remove_task(dl_progress)
+                count += len(data)
 
     dl_path.rename(output_path)
     return True
 
 
+def download_json_file(file: Path):
+    dl_path = volumes_file.with_suffix(".json.dl")
+
+    with client.stream("GET", url=file.name) as r:
+        response: httpx.Response = r
+        rich.print(f"[red]{response.status_code} [blue]{response.url}")
+        rich.print(f"[yellow]Headers: {response.headers}")
+        response.raise_for_status()
+        total = int(response.headers.get("Content-Length", -1))
+        with alive_bar(total if total > 0 else None) as bar:
+            with dl_path.open(mode="wb") as output:
+                for data in r.iter_bytes():
+                    output.write(data)
+                    bar(len(data))
+
+    dl_path.rename(file)
+
+
+def download_volumes_file():
+    rich.print("[green] Downloading volumes file...")
+    download_json_file(volumes_file)
+
+
+def download_jurisdictions():
+    rich.print("[green] Downloading volumes file...")
+    download_json_file(jurisdictions_file)
+
+
 @click.command()
 def main():
+    if not volumes_file.exists():
+        download_volumes_file()
+
+    jurisdiction_files = list(legal_vec.data_dir.glob("Jurisdiction.*.json"))
+
+    if not jurisdiction_files:
+        download_jurisdictions()
+
+    jurisdictions_of_interest = {"Cal.", "U.S."}
+
+    # jurisdictions: list[JurisdictionFull] = [legal_vec.parse_json(f) for f in jurisdiction_files]
+    # jurisdiction_ids = set(j["id"] for j in jurisdictions)
+
+    rich.print(f"[green]Finding volumes in jurisdictions: {jurisdictions_of_interest}")
+
+    volumes: Iterator[ReporterVolume] = (
+        v
+        for v in legal_vec.parse_json_stream(volumes_file)
+        for jur in v["jurisdictions"]
+        if jur["name"] in jurisdictions_of_interest
+    )
+
     vols: list[ReporterVolume] = list(volumes)
 
-    print(f"Volumes: {len(vols)}")
+    rich.print(f"[blue]volumes: {len(vols)}")
 
-    # with Progress() as progress:
-    #     volumes_progress = progress.add_task("[blue]Volumes...", total=len(vols))
+    already_downloaded = 0
 
     with alive_bar(len(vols), title="Volume") as vol_bar:
         for vol in vols:
             downloaded = download_volume(vol["reporter_slug"], vol["volume_number"], vol_bar)
             vol_bar(skipped=not downloaded)
-            # progress.advance(volumes_progress)
+            if not downloaded:
+                already_downloaded += 1
+
+    rich.print(f"[purple](skipped: {already_downloaded})")

@@ -11,7 +11,7 @@ my_dir = Path(__file__).parent
 data_dir = (my_dir / "../../data/").resolve()
 cases_dir = data_dir / "cases"
 downloads_dir = data_dir / "downloads"
-case_metadata_files = [m for m in cases_dir.glob("*/metadata/CasesMetadata.json")]
+downloads_dir.mkdir(parents=True, exist_ok=True)
 
 
 def parse_json[T: TypedDict](path: Path) -> T:

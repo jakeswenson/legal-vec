@@ -24,6 +24,8 @@ license = {text = "Parity-7.0.0"}
 [tool.pdm.scripts]
 gen = {call = "legal_vec.gen:train"}
 download = {call = "legal_vec.data.download:main"}
+dl-vols = {call = "legal_vec.data.download:download_volumes_file"}
+dl-juris = {call = "legal_vec.data.download:download_jurisdictions"}
 style = "black --preview src"
 
 [tool.black]
