@@ -8,7 +8,7 @@ import json_stream
 from legal_vec.types import Opinion, CaseMetadata
 
 my_dir = Path(__file__).parent
-data_dir = (my_dir / "../../data/").absolute()
+data_dir = (my_dir / "../../data/").resolve()
 cases_dir = data_dir / "cases"
 downloads_dir = data_dir / "downloads"
 case_metadata_files = [m for m in cases_dir.glob("*/metadata/CasesMetadata.json")]

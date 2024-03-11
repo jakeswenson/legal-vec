@@ -12,16 +12,19 @@ import sys
 
 COLLECTION_NAME = "cases"
 
-allowed_opinions = {"majority": 1, "unanimous": 1, "concurring-in-part-and-dissenting-in-part": 2}
+allowed_opinions = {
+    "majority": 1,
+    "unanimous": 1,
+    "on-the-merits": 1,
+    "rehearing": 2,
+    "concurrence": 3,
+    "concurring-in-part-and-dissenting-in-part": 4,
+}
 
 
 def build_db(case_file: zipfile.Path, client, model, progress):
-    try:
-        case: CaseMetadata = parse_json(case_file)
-    except zipfile.BadZipfile:
-        rich.print("[red]Bad Zip:", case_file, file=sys.stderr)
-        progress()
-        return
+    case: CaseMetadata = parse_json(case_file)
+
 
     if client.retrieve(COLLECTION_NAME, [case["id"]]):
         progress()
@@ -51,7 +54,12 @@ def build_db(case_file: zipfile.Path, client, model, progress):
         )[0]
     except StopIteration:
         types = list(map(lambda o: o["type"], opinions))
-        rich.print("[red] {cite} Opinions: {types}")
+        rich.print(f"[red] {cite} Opinions: {types}")
+        progress()
+        return
+    except IndexError:
+        types = list(map(lambda o: o["type"], opinions))
+        rich.print(f"[red] {cite} Opinions: {types}")
         progress()
         return
     # print(opinion["text"])
@@ -98,6 +106,7 @@ def train():
 
     # cases_dir.glob("*/json/*.json")
     if client.collection_exists(COLLECTION_NAME):
+        col = client.get_collection(COLLECTION_NAME)
         pass
     else:
         client.create_collection(
@@ -114,9 +123,14 @@ def train():
         for zip_path in zips:
             zip = zipfile.ZipFile(zip_path)
             bar.text = f"{zip_path.parent.name}/{zip_path.stem}"
-            for case_file in zipfile.Path(zip, "json/").iterdir():
-                # bar.text = f"{zip_path.parent.name}/{zip_path.stem}/{case_file.name}"
-                build_db(case_file, client, model, bar)
+            try:
+                for case_file in zipfile.Path(zip, "json/").iterdir():
+                    # bar.text = f"{zip_path.parent.name}/{zip_path.stem}/{case_file.name}"
+                    build_db(case_file, client, model, bar)
+            except zipfile.BadZipfile:
+                rich.print("[red]Bad Zip:", case_file, file=sys.stderr)
+                bar()
+                continue
 
     query = input("Query: ")
     vecs = model.encode(query)
